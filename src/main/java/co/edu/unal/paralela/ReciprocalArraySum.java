@@ -1,17 +1,25 @@
 package co.edu.unal.paralela;
 
+import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.RecursiveAction;
+import java.util.logging.Logger;
 
-/**
- * Clase que contiene los métodos para implementar la suma de los recíprocos de un arreglo usando paralelismo.
- */
-public final class ReciprocalArraySum {
+public final class ReciprocalArraySum extends RecursiveAction {
 
-    /**
-     * Constructor.
-     */
-    private ReciprocalArraySum() {
+
+    private static final Logger log = Logger.getLogger(ReciprocalArraySum.class.getName());
+
+    private double [] array;
+    private int p;
+    private int r;
+    private double value;
+
+    private ReciprocalArraySum(double [] array, int p, int r) {
+        this.array = array;
+        this.p = p;
+        this.r = r;
     }
+
 
     /**
      * Calcula secuencialmente la suma de valores recíprocos para un arreglo.
@@ -132,23 +140,41 @@ public final class ReciprocalArraySum {
     /**
      * Para hacer: Modificar este método para calcular la misma suma de recíprocos como le realizada en
      * seqArraySum, pero utilizando dos tareas ejecutándose en paralelo dentro del framework ForkJoin de Java
-     * Se puede asumir que el largo del arreglo de entrada 
+     * Se puede asumir que el largo del arreglo de entrada
      * es igualmente divisible por 2.
      *
      * @param input Arreglo de entrada
      * @return La suma de los recíprocos del arreglo de entrada
      */
     protected static double parArraySum(final double[] input) {
+
         assert input.length % 2 == 0;
 
-        double sum = 0;
+        int mid = input.length / 2;
 
-        // Calcula la suma de los recíprocos de los elementos del arreglo
-        for (int i = 0; i < input.length; i++) {
-            sum += 1 / input[i];
+        ReciprocalArraySumTask leftTask = new ReciprocalArraySumTask(0, mid, input);
+        ReciprocalArraySumTask rightTask = new ReciprocalArraySumTask(mid, input.length, input);
+
+
+        ForkJoinPool pool = new ForkJoinPool(2);
+
+        leftTask.fork();
+
+        rightTask.compute();
+
+        leftTask.join();
+
+        return leftTask.getValue() + rightTask.getValue();
+
+    }
+
+    @Override
+    protected void compute() {
+        // Calcular la suma de recíprocos en el rango asignado a esta tarea
+        value = 0;
+        for (int i = this.p; i < this.r; i++) {
+            value += (1 / this.array[i]);
         }
-
-        return sum;
     }
 
     /**
@@ -172,4 +198,16 @@ public final class ReciprocalArraySum {
 
         return sum;
     }
+
+    public static void main(String[] args) {
+
+        double[] array = new double[1_000_000];
+        for (int i = 0; i < array.length; i++) {
+            array[i] = i + 1;
+        }
+
+        log.info("Aqui inicia el proceso");
+    }
+
+
 }
