@@ -6,31 +6,29 @@ import java.util.logging.Logger;
 
 public final class ReciprocalArraySum extends RecursiveAction {
 
-
     private static final Logger log = Logger.getLogger(ReciprocalArraySum.class.getName());
 
-    private double [] array;
+    /*
+     * Pool compartido para evitar crear un ForkJoinPool nuevo en cada llamada.
+     * Esto ayuda mucho en los tests de rendimiento.
+     */
+    private static final ForkJoinPool FORK_JOIN_POOL =
+            new ForkJoinPool(Runtime.getRuntime().availableProcessors());
+
+    private double[] array;
     private int p;
     private int r;
     private double value;
 
-    private ReciprocalArraySum(double [] array, int p, int r) {
+    private ReciprocalArraySum(double[] array, int p, int r) {
         this.array = array;
         this.p = p;
         this.r = r;
     }
 
-
-    /**
-     * Calcula secuencialmente la suma de valores recíprocos para un arreglo.
-     *
-     * @param input Arreglo de entrada
-     * @return La suma de los recíprocos del arreglo de entrada
-     */
     protected static double seqArraySum(final double[] input) {
         double sum = 0;
 
-        // Calcula la suma de los recíprocos de los elementos del arreglo
         for (int i = 0; i < input.length; i++) {
             sum += 1 / input[i];
         }
@@ -38,48 +36,21 @@ public final class ReciprocalArraySum extends RecursiveAction {
         return sum;
     }
 
-    /**
-     * calcula el tamaño de cada trozo o sección, de acuerdo con el número de secciones para crear
-     * a través de un número dado de elementos.
-     *
-     * @param nChunks El número de secciones (chunks) para crear
-     * @param nElements El número de elementos para dividir
-     * @return El tamaño por defecto de la sección (chunk)
-     */
     private static int getChunkSize(final int nChunks, final int nElements) {
-        // Función techo entera
         return (nElements + nChunks - 1) / nChunks;
     }
 
-    /**
-     * Calcula el índice del elemento inclusivo donde la sección/trozo (chunk) inicia,
-     * dado que hay cierto número de secciones/trozos (chunks).
-     *
-     * @param chunk la sección/trozo (chunk) para cacular la posición de inicio
-     * @param nChunks Cantidad de secciones/trozos (chunks) creados
-     * @param nElements La cantidad de elementos de la sección/trozo que deben atravesarse
-     * @return El índice inclusivo donde esta sección/trozo (chunk) inicia en el conjunto de 
-     *         nElements
-     */
     private static int getChunkStartInclusive(final int chunk,
             final int nChunks, final int nElements) {
         final int chunkSize = getChunkSize(nChunks, nElements);
         return chunk * chunkSize;
     }
 
-    /**
-     * Calcula el índice del elemento exclusivo que es proporcionado al final de la sección/trozo (chunk),
-     * dado que hay cierto número de secciones/trozos (chunks).
-     *
-     * @param chunk La sección para calcular donde termina
-     * @param nChunks Cantidad de secciones/trozos (chunks) creados
-     * @param nElements La cantidad de elementos de la sección/trozo que deben atravesarse
-     * @return El índice de terminación exclusivo para esta sección/trozo (chunk)
-     */
-    private static int getChunkEndExclusive(final int chunk, final int nChunks,
-            final int nElements) {
+    private static int getChunkEndExclusive(final int chunk,
+            final int nChunks, final int nElements) {
         final int chunkSize = getChunkSize(nChunks, nElements);
         final int end = (chunk + 1) * chunkSize;
+
         if (end > nElements) {
             return nElements;
         } else {
@@ -87,35 +58,13 @@ public final class ReciprocalArraySum extends RecursiveAction {
         }
     }
 
-    /**
-     * Este pedazo de clase puede ser completada para para implementar el cuerpo de cada tarea creada
-     * para realizar la suma de los recíprocos del arreglo en paralelo.
-     */
     private static class ReciprocalArraySumTask extends RecursiveAction {
-        /**
-         * Iniciar el índice para el recorrido transversal hecho por esta tarea.
-         */
+
         private final int startIndexInclusive;
-        /**
-         * Concluir el índice para el recorrido transversal hecho por esta tarea.
-         */
         private final int endIndexExclusive;
-        /**
-         * Arreglo de entrada para la suma de recíprocos.
-         */
         private final double[] input;
-        /**
-         * Valor intermedio producido por esta tarea.
-         */
         private double value;
 
-        /**
-         * Constructor.
-         * @param setStartIndexInclusive establece el índice inicial para comenzar
-         *        el recorrido trasversal.
-         * @param setEndIndexExclusive establece el índice final para el recorrido trasversal.
-         * @param setInput Valores de entrada
-         */
         ReciprocalArraySumTask(final int setStartIndexInclusive,
                 final int setEndIndexExclusive, final double[] setInput) {
             this.startIndexInclusive = setStartIndexInclusive;
@@ -123,77 +72,104 @@ public final class ReciprocalArraySum extends RecursiveAction {
             this.input = setInput;
         }
 
-        /**
-         * Adquiere el valor calculado por esta tarea.
-         * @return El valor calculado por esta tarea
-         */
         public double getValue() {
             return value;
         }
 
         @Override
         protected void compute() {
-            // Para hacer
+            double localSum = 0;
+
+            for (int i = startIndexInclusive; i < endIndexExclusive; i++) {
+                localSum += 1 / input[i];
+            }
+
+            value = localSum;
         }
     }
 
-    /**
-     * Para hacer: Modificar este método para calcular la misma suma de recíprocos como le realizada en
-     * seqArraySum, pero utilizando dos tareas ejecutándose en paralelo dentro del framework ForkJoin de Java
-     * Se puede asumir que el largo del arreglo de entrada
-     * es igualmente divisible por 2.
-     *
-     * @param input Arreglo de entrada
-     * @return La suma de los recíprocos del arreglo de entrada
-     */
     protected static double parArraySum(final double[] input) {
 
         assert input.length % 2 == 0;
 
-        int mid = input.length / 2;
+        final int mid = input.length / 2;
 
-        ReciprocalArraySumTask leftTask = new ReciprocalArraySumTask(0, mid, input);
-        ReciprocalArraySumTask rightTask = new ReciprocalArraySumTask(mid, input.length, input);
+        final ReciprocalArraySumTask leftTask =
+                new ReciprocalArraySumTask(0, mid, input);
 
+        final ReciprocalArraySumTask rightTask =
+                new ReciprocalArraySumTask(mid, input.length, input);
 
-        ForkJoinPool pool = new ForkJoinPool(2);
-
-        leftTask.fork();
-
-        rightTask.compute();
-
-        leftTask.join();
+        FORK_JOIN_POOL.invoke(new RecursiveAction() {
+            @Override
+            protected void compute() {
+                invokeAll(leftTask, rightTask);
+            }
+        });
 
         return leftTask.getValue() + rightTask.getValue();
-
     }
 
     @Override
     protected void compute() {
-        // Calcular la suma de recíprocos en el rango asignado a esta tarea
-        value = 0;
-        for (int i = this.p; i < this.r; i++) {
-            value += (1 / this.array[i]);
-        }
-    }
+        double sum0 = 0;
+        double sum1 = 0;
+        double sum2 = 0;
+        double sum3 = 0;
+        double sum4 = 0;
+        double sum5 = 0;
+        double sum6 = 0;
+        double sum7 = 0;
 
-    /**
-     * Para hacer: extender el trabajo hecho para implementar parArraySum que permita utilizar un número establecido
-     * de tareas para calcular la suma del arreglo recíproco. 
-     * getChunkStartInclusive y getChunkEndExclusive pueden ser útiles para cacular 
-     * el rango de elementos índice que pertenecen a cada sección/trozo (chunk).
-     *
-     * @param input Arreglo de entrada
-     * @param numTasks El número de tareas para crear
-     * @return La suma de los recíprocos del arreglo de entrada
-     */
+        int i = startIndexInclusive;
+
+        final int limit = endIndexExclusive - 7;
+
+        for (; i < limit; i += 8) {
+        sum0 += 1.0 / input[i];
+        sum1 += 1.0 / input[i + 1];
+        sum2 += 1.0 / input[i + 2];
+        sum3 += 1.0 / input[i + 3];
+        sum4 += 1.0 / input[i + 4];
+        sum5 += 1.0 / input[i + 5];
+        sum6 += 1.0 / input[i + 6];
+        sum7 += 1.0 / input[i + 7];
+        }
+
+        double localSum = sum0 + sum1 + sum2 + sum3
+            + sum4 + sum5 + sum6 + sum7;
+
+        for (; i < endIndexExclusive; i++) {
+        localSum += 1.0 / input[i];
+        }
+
+        value = localSum;
+}
+
     protected static double parManyTaskArraySum(final double[] input,
             final int numTasks) {
+
+        final ReciprocalArraySumTask[] tasks =
+                new ReciprocalArraySumTask[numTasks];
+
+        for (int i = 0; i < numTasks; i++) {
+            final int start = getChunkStartInclusive(i, numTasks, input.length);
+            final int end = getChunkEndExclusive(i, numTasks, input.length);
+
+            tasks[i] = new ReciprocalArraySumTask(start, end, input);
+        }
+
+        FORK_JOIN_POOL.invoke(new RecursiveAction() {
+            @Override
+            protected void compute() {
+                invokeAll(tasks);
+            }
+        });
+
         double sum = 0;
 
-        // Calcula la suma de los recíprocos de los elementos del arreglo
-        for (int i = 0; i < input.length; i++) {
-            sum += 1 / input[i];
+        for (int i = 0; i < numTasks; i++) {
+            sum += tasks[i].getValue();
         }
 
         return sum;
@@ -202,12 +178,11 @@ public final class ReciprocalArraySum extends RecursiveAction {
     public static void main(String[] args) {
 
         double[] array = new double[1_000_000];
+
         for (int i = 0; i < array.length; i++) {
             array[i] = i + 1;
         }
 
         log.info("Aqui inicia el proceso");
     }
-
-
 }
