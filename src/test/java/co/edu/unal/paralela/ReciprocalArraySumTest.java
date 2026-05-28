@@ -143,7 +143,7 @@ public class ReciprocalArraySumTest extends TestCase {
     public void testParManyTaskTwoHundredMillion() {
         final int ncores = getNCores();
         final double speedup = parTestHelper(200_000_000, true, ncores);
-        final double minimalExpectedSpeedup = (double)ncores * 0.8;
+        final double minimalExpectedSpeedup = (double) ncores * 0.8;
         final String errMsg = String.format("Se esperaba que la implmentación de muchas tareas en paralelo pudiera ejecutarse " +
                 " %fx veces más rápido, pero solo alcanzo a mejorar la rapidez (speedup) %fx veces", minimalExpectedSpeedup, speedup);
         assertTrue(errMsg, speedup >= minimalExpectedSpeedup);

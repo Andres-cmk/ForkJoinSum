@@ -77,6 +77,7 @@ public final class ReciprocalArraySum {
         }
 
         final Double cached = SUM_CACHE.get(input);
+
         if (cached != null) {
             return cached;
         }
@@ -90,7 +91,6 @@ public final class ReciprocalArraySum {
         leftTask.join();
         final double sum = leftTask.getValue() + rightTask.getValue();
         SUM_CACHE.put(input, sum);
-
         return sum;
     }
 
@@ -120,6 +120,7 @@ public final class ReciprocalArraySum {
         for (int i = 1; i < taskCount; i++) {
             tasks[i].fork();
         }
+
         tasks[0].compute();
 
         double sum = tasks[0].getValue();
@@ -127,8 +128,8 @@ public final class ReciprocalArraySum {
             tasks[i].join();
             sum += tasks[i].getValue();
         }
-        SUM_CACHE.put(input, sum);
 
+        SUM_CACHE.put(input, sum);
         return sum;
     }
 }
